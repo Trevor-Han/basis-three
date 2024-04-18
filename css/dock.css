@@ -1,0 +1,63 @@
+.dock_con{
+    width: max-content;
+    position: fixed;
+    left: 50%;
+    bottom: -20px;
+    margin: 0 auto 2em auto;
+    transform:translate(-50%,0);
+    border-radius: 15px;
+    box-shadow: 0 -2px 7px 1px rgba(44, 38, 38, 0.2);
+    display:flex;
+    background: rgba(255,255,255,0.3);
+    justify-content: center;
+    transform-origin: center;
+    animation: showIn 0.5s cubic-bezier(0.075,0.82,0.165,1) forwards;
+}
+@keyframes showIn {
+    to {
+        bottom: 0;
+    }
+}
+.dock{
+    height: 40px;
+    padding: 10px;
+    display:flex;
+    justify-content: space-around;
+}
+.dock-item{
+    cursor: pointer;
+    width: 40px;
+    height: 40px;
+    background: rgb(45, 45, 45);
+    background-size: 125px;
+    border-radius: 4px;
+    margin: 0 10px;
+    overflow: hidden;
+    transition: 0.7s cubic-bezier(0.075,0.82,0.165,1);
+    transform-origin: bottom;
+    position: relative;
+}
+.dock-item i{
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%,-50%);
+    width: 100%;
+    height: 100%;
+}
+.dock-item .icon {
+    background-position: center center;
+    background-size: 50%;
+}
+.icon_check{
+    background: url('../image/icon_check.svg') no-repeat;
+}
+.icon_color{
+    background: url('../image/icon_color.svg') no-repeat;
+}
+.icon_setup{
+    background: url('../image/icon_setup.svg') no-repeat;
+}
+.icon_fly{
+    background: url('../image/icon_fly.svg') no-repeat;
+}

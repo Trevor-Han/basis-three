@@ -1,0 +1,39 @@
+.text-bubble {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    color: #2d2d2d;
+    font-size: 18px;
+    padding: 10px;
+    border-radius: 10px;
+    opacity: 1;
+    animation: throwUp 1.5s cubic-bezier(0.075,0.82,0.165,1) forwards;
+}
+.text{
+    transform: rotate(0);
+    animation: throwRotate 0.4s linear infinite;
+}
+
+@keyframes throwUp {
+    0% {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    60%{
+        opacity: 1;
+        transform: translateY(-120px);
+    }
+    100% {
+        transform: translateY(-80px);
+        opacity: 0;
+    }
+}
+@keyframes throwRotate {
+    0% {
+        transform: rotate(0);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}

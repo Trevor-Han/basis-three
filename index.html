@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <title>DJI MINI 2</title>
+    <link type="text/css" rel="stylesheet" href="./css/main.css">
+    <link type="text/css" rel="stylesheet" href="./css/dock.css">
+    <link type="text/css" rel="stylesheet" href="./css/text-up.css">
+</head>
+<body>
+<section>
+    <div class="header-title display-none">
+        <h1 class="title-h1">DJI MINI 2</h1>
+        <p class="title-p">快意飞行</p>
+    </div>
+    <!-- loading相关 -->
+    <div class="loading-con">
+        <div class="loading">
+            <div class="loading-circle"></div>
+            <div class="progress"></div>
+        </div>
+        <div class="loading-complete display-none">
+            <p>
+                加载完成
+                <svg t="1677233206130" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2675" width="24" height="24"><path d="M537.6 102.4c73.5744 0 142.336 20.6848 200.704 56.576 15.872 9.6256 16.7936 23.1424 2.9696 40.5504-14.08 16.2816-43.008 13.2608-86.8352-9.216l-0.0512 0.0512a318.1568 318.1568 0 1 0 104.8064 524.3904h0.3584c19.456-26.7776 40.5504-40.192 63.1296-40.2432l6.8096 0.4096c24.064 4.4032 30.4128 16.6912 19.0464 36.864l0.2048-0.3584-0.1536 0.1536-0.0512 0.2048h-0.1024l-7.936 10.5984A384 384 0 1 1 537.6 102.4z m332.288 201.0112a33.28 33.28 0 0 1 0 47.104l-276.48 276.48a31.2832 31.2832 0 0 1-0.512 0.4608l-3.584 3.584a30.72 30.72 0 0 1-43.4176 0l-1.8432-1.792-0.4096-0.512-135.3216-135.2704a30.72 30.72 0 0 1 0-43.4176l3.584-3.584a30.72 30.72 0 0 1 43.4688 0l112.2304 112.128 255.232-255.1808a33.28 33.28 0 0 1 47.104 0z" fill="#ffffff" p-id="2676"></path></svg>
+            </p>
+            <!--        <div class="start">进入场景</div>-->
+        </div>
+    </div>
+    <canvas id="canvas"></canvas>
+
+    <div class="dock_con display-none">
+        <div class="dock">
+            <div class="dock-item">
+                <i class="icon icon_fly" data-name="起飞"></i>
+            </div>
+            <div class="dock-item">
+                <i class="icon icon_color" data-name="颜色贴图"></i>
+            </div>
+            <div class="dock-item">
+                <i class="icon icon_check" data-name="模型切换"></i>
+            </div>
+            <div class="dock-item">
+                <i class="icon icon_setup" data-name="设置"></i>
+            </div>
+        </div>
+    </div>
+
+<!-- 颜色贴图-->
+    <div class="color-map"></div>
+
+    <div class="text-up"></div>
+
+</section>
+
+</body>
+<script src="./utils/index.js"></script>
+<script src="./js/dock.js"></script>
+<script src="./js/textUp.js"></script>
+<script type="importmap">
+    {
+        "imports": {
+                "three": "./js/three.module.js"
+        }
+    }
+</script>
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls }  from './js/OrbitControls.js'
+    import { GUI } from './js/lil-gui.module.min.js'
+    import { GLTFLoader } from './js/loaders/GLTFLoader.js';
+    import TWEEN from './js/tween.module.js';
+
+    let scene, camera, renderer, mesh,controls,dLight,raycaster,mixer,tween;
+    let gltf,gltf_v11;
+    let client = {x:0, y:0}
+    let tip = document.createElement('div')
+
+    let mouse = new THREE.Vector2();
+    let velocity = new THREE.Vector3();
+    let up_vector = new THREE.Vector3(0, 1, 0);
+    let temp_vector = new THREE.Vector3();
+    let targetPosition = new THREE.Vector3(1.8, 1.9, 3.4);
+    let endPosition = new THREE.Vector3(10, 10, 10);
+    let axesHelper = new THREE.AxesHelper( 3 );
+
+    let INTERSECTED;
+    let timer;
+
+    let isLoading = true;
+    let isJumping = false;
+    let isDown = false; // 是否点击
+    let isAppendColor = false; // 是否添加了颜色贴图
+    let isCheck = false;
+    let isFly = false;
+    let jumpVelocity = 0;
+    let keyCode = ''; // 获取按键
+    let flyPoly = [];
+
+    const canvas = document.querySelector('#canvas');
+    const dock = document.querySelector('.dock');
+    const dock_con = document.querySelector('.dock_con');
+    const progress = document.querySelector(".progress");
+    const loading_complete = document.querySelector('.loading-complete');
+    const loading_con = document.querySelector('.loading-con');
+    const title = document.querySelector(".header-title");
+    const color_map = document.querySelector(".color-map");
+
+    const dampingFactor = 0.05;
+    const maxJumpHeight = 2;
+    const colorMap = ["#ffffff","#9287E7", "#FF7B7B", "#FEB64D", "#49D6A5", "#32D3EB"]
+
+    canvas.height = window.innerHeight
+    canvas.width = window.innerWidth
+
+    loadScenes();
+    async function loadScenes(){
+        gltf = await loadStaticScene();
+        gltf_v11 = await loadStaticScene_v11();
+        setRotateAnimation(gltf)
+        showLoading();
+        handleIntoScene();
+    }
+
+    function setRotateAnimation(gltf){
+        gltf.scene.traverse((e)=>{
+            const polySurface_number = e.name.replace(/polySurface/g,'')
+            const rotatePoly = ['58','81','90','102']
+            if (rotatePoly.includes(polySurface_number)){
+                const rotation = e.rotation
+                const tween  = new TWEEN.Tween( e.rotation)
+                    .to({x:rotation.x,y:Math.PI * 2,z:rotation.z}, 50)
+                    .easing(TWEEN.Easing.Linear.None)
+                    .repeat(Infinity)
+                flyPoly.push(tween)
+            }
+        })
+    }
+    function loadStaticScene(){
+        return new Promise(resolve => {
+            let loader = new GLTFLoader();
+            const url = "./models/gltf/WM161_zhankai_1k.glb"
+            loader.load(url, (gltf) => {
+                gltf.scene.position.set(0,27,0)
+                gltf.scene.scale.set(15, 15, 15);
+                resolve(gltf);
+            },(event) =>{
+                const {loaded,total} = event
+                handleLoadProgress({url,loaded,total})
+            });
+        })
+    }
+
+    function loadStaticScene_v11(){
+        return new Promise(resolve => {
+            let loader = new GLTFLoader();
+            const url = "./models/gltf/wm161_v11_zhedie_1k.glb"
+            loader.load(url, (gltf) => {
+                gltf.scene.position.set(0,-27,0)
+                gltf.scene.scale.set(15, 15, 15);
+                resolve(gltf);
+            },(event) =>{
+                const {loaded,total} = event
+                handleLoadProgress({url,loaded,total})
+            });
+        })
+    }
+
+    function handleLoadProgress({url, loaded, total}){
+        const percentage = ((loaded / total) * 100).toFixed(2);
+        if (/.*\.(blob|glb)$/i.test(url)) {
+            updateLoadingProgress(`加载场景模型：${percentage}%`);
+        }
+
+    }
+
+    function updateLoadingProgress(loading_text){
+        progress && (progress.textContent = loading_text);
+    }
+
+    function showLoading() {
+        loading_complete.classList.remove("display-none");
+    }
+
+    function handleIntoScene(){
+        loading_con.classList.add("hide-loading");
+        loading_con.addEventListener('animationend', function() {
+            loading_con.classList.add("display-none")
+            document.body.appendChild(tip)
+            init();
+            animate();
+        });
+    }
+
+
+    function init() {
+        const initColorMap = () =>{
+            colorMap.forEach(item=> {
+                const dom = document.createElement('div');
+                dom.style.background = item;
+                dom.classList.add('color-map-item');
+                color_map.appendChild(dom);
+            })
+        }
+        const initScene = () =>{
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color( 0xa0a0a0 );
+            scene.fog = new THREE.Fog( 0xa0a0a0, 4, 20 );
+        }
+
+        const initCamera = () =>{
+            camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.1, 100 );
+            camera.position.set( 10, 20, 10 );
+
+            // const gui = new GUI()
+            // gui.add(camera.position, 'x', 0, 100)
+            // gui.add(camera.position, 'y', 0, 100)
+            // gui.add(camera.position, 'z', 0, 100)
+        }
+
+        const hemiLight = () =>{
+            const hemiLight = new THREE.HemisphereLight( 0xffffff, 0x444444, 3 );
+            hemiLight.position.set( 0, 20, 0 );
+            scene.add( hemiLight );
+        }
+
+        const initMash = () =>{
+            const geometry = new THREE.BoxGeometry();
+            const material = new THREE.MeshPhongMaterial( { color: '#8F8BFF' } );
+            mesh = new THREE.Mesh( geometry, material );
+            mesh.scale.set( 1.5, 1.5, 1.5 );
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.position.y = 0.5;
+            mesh.name = 'cube'
+            scene.add( mesh );
+        }
+
+        const initGltfGroup = () =>{
+            scene.add( gltf.scene );
+            scene.add( gltf_v11.scene );
+        }
+
+        const initControls = () =>{
+            controls = new OrbitControls( camera, canvas );
+            controls.minDistance = 1.5
+            // controls.enableDamping = true
+            controls.maxDistance = 10
+            controls.target.set(0,0.5,0)
+        }
+
+        const initLight = () =>{
+            dLight = new THREE.DirectionalLight( 0xffffff, 3 );
+            dLight.position.set( 0, 20, 10 );
+            dLight.castShadow = true;
+            dLight.shadow.camera.top = 2;
+            dLight.shadow.camera.bottom = - 2;
+            dLight.shadow.camera.left = - 2;
+            dLight.shadow.camera.right = 2;
+            scene.add( dLight );
+
+        }
+
+        const initGround = () =>{
+            const ground = new THREE.Mesh( new THREE.PlaneGeometry( 40, 40 ), new THREE.MeshPhongMaterial( { color: 0xbbbbbb, depthWrite: false } ) );
+            ground.rotation.x = - Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add( ground );
+        }
+        const initGrid = () =>{
+            const grid = new THREE.GridHelper( 40, 20, 0x000000, 0x000000 );
+            grid.material.opacity = 0.2;
+            grid.material.transparent = true;
+            scene.add( grid );
+        }
+
+        const initAxesHelper = () =>{
+            let axesHelper = new THREE.AxesHelper( 3 );
+            scene.add( axesHelper );
+        }
+        const initRaycaster = () =>{
+            raycaster = new THREE.Raycaster();
+            // raycaster.far = 3
+        }
+
+
+        const initRender = () =>{
+            renderer = new THREE.WebGLRenderer( { antialias: true,canvas:canvas } );
+            renderer.setPixelRatio( window.devicePixelRatio );
+            renderer.setSize( window.innerWidth, window.innerHeight );
+            renderer.shadowMap.enabled = true;
+        }
+        initColorMap();
+        initCamera();
+        initScene();
+        hemiLight();
+        initGltfGroup();
+        // initMash();
+        // initLoadGltf();
+        initLight();
+        initGround();
+        initGrid();
+
+        initRender();
+        initControls();
+        // initAxesHelper();
+        initRaycaster();
+        initAddEventListener();
+
+        handleDockClick();
+
+    }
+
+    function initAddEventListener(){
+        window.addEventListener( 'resize', onWindowResize );
+
+        canvas.addEventListener('mousemove', function(event) {
+            client = {
+                x: event.clientX,
+                y: event.clientY
+            }
+            clearMouse();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        });
+
+        const throttledScrollHandler = throttle(function() {
+            const id = document.querySelector('.text-up')
+            new TextUp( {id:id,text: keyCode.toUpperCase()} )
+        }, 500);
+
+        document.addEventListener('keydown', function(event) {
+            keyCode = event.key === ' '? 'space' : event.key
+            camera.position.addScaledVector(velocity, 0.5);
+            const angle = controls.getAzimuthalAngle();
+            const speed = 0.25
+            mouse = new THREE.Vector2(0,0)
+
+
+            switch (event.key) {
+                case 'w':
+                    temp_vector.set(0, 0, -1).applyAxisAngle(up_vector, angle);
+                    camera.position.addScaledVector(temp_vector, speed);
+                    throttledScrollHandler()
+                    break;
+                case 's':
+                    temp_vector.set(0, 0, 1).applyAxisAngle(up_vector, angle);
+                    camera.position.addScaledVector(temp_vector, speed);
+                    throttledScrollHandler()
+                    break;
+                case 'a':
+                    temp_vector.set(-1, 0, 0).applyAxisAngle(up_vector, angle);
+                    camera.position.addScaledVector(temp_vector, speed);
+                    throttledScrollHandler()
+                    break;
+                case 'd':
+                    temp_vector.set(1, 0, 0).applyAxisAngle(up_vector, angle);
+                    camera.position.addScaledVector(temp_vector, speed);
+                    throttledScrollHandler()
+                    break;
+                case ' ':
+                    jump();
+                    throttledScrollHandler()
+                    break;
+            }
+        });
+
+        // 点击的时候实现一个切换相机效果
+        // canvas.addEventListener('mousedown', onMousedown);
+        //
+        // canvas.addEventListener('mouseup', onMouseup);
+
+
+    }
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+
+        renderer.setSize( window.innerWidth, window.innerHeight );
+    }
+
+    function onMousedown() {
+        isDown = true;
+        timer = setInterval(mouseCamera, 1000/60);
+    }
+
+    function onMouseup() {
+        clearMouse();
+    }
+
+    function animate(){
+        requestAnimationFrame( animate );
+        updateJump();
+        controls.update();
+        TWEEN.update();
+        isLoading && updateCamera();
+        !isLoading && hoverPoint();
+        renderer.render( scene, camera );
+    }
+
+    function handleDockClick() {
+        const handleCheck = () =>{
+            isCheck = !isCheck;
+            const gltf_vector = isCheck ? new THREE.Vector3(0,0,0): new THREE.Vector3(0,27,0)
+            const gltf_v11_vector = isCheck ? new THREE.Vector3(0,0,0): new THREE.Vector3(0,-27,0)
+            new TWEEN.Tween( gltf.scene.position)
+                .to({ x: gltf_vector.x, y: gltf_vector.y, z: gltf_vector.z }, 500)
+                .easing(TWEEN.Easing.Quadratic.Out)
+                .start();
+            new TWEEN.Tween( gltf_v11.scene.position)
+                .to({ x: gltf_v11_vector.x, y: gltf_v11_vector.y, z: gltf_v11_vector.z }, 500)
+                .easing(TWEEN.Easing.Quadratic.Out)
+                .start();
+        }
+
+        const handleColor = () =>{
+            isAppendColor = !isAppendColor;
+            if (isAppendColor){
+                color_map.classList.add('show-color-map');
+                delegate(color_map, 'click', 'div', function(e){
+                    setColorMap(e.target.style.backgroundColor)
+                })
+            }else {
+                color_map.classList.remove('show-color-map');
+            }
+
+            const setColorMap = (color) =>{
+                gltf.scene.traverse((e)=>{
+                    const polySurface_number = e.name.replace(/polySurface/g,'')
+                    const windBlade = ['21','101','201']
+                    if (windBlade.includes(polySurface_number)){
+                        e.material.color.set(color)
+                    }
+                })
+            }
+
+        }
+
+        const handleFly = () =>{
+            isFly =  !isFly
+            flyPoly.forEach(item=>{
+                if (isFly){
+                    item && item.start()
+                }else {
+                    item && item.stop()
+                }
+            })
+        }
+
+        delegate(dock, 'click', 'i', function(e){
+            const DOCK_MAP = [
+                {
+                    target: ()=> e.target.classList.contains('icon_check'),
+                    handler: handleCheck
+                },
+                {
+                    target: ()=> e.target.classList.contains('icon_color'),
+                    handler: handleColor
+                },
+                {
+                    target: ()=> e.target.classList.contains('icon_fly'),
+                    handler: handleFly
+                }
+            ]
+            const event = DOCK_MAP.find(item => item.target());
+            if (event) {
+                event.handler();
+            }
+        })
+
+    }
+
+    function updateJump(){
+        if (isJumping) {
+            camera.position.y += jumpVelocity;
+            jumpVelocity -= 0.05;
+            if (camera.position.y <= 1.5) {
+                camera.position.y = 1.5;
+                isJumping = false;
+            }
+        }
+    }
+
+    function jump() {
+        if (!isJumping) {
+            jumpVelocity = 0.3 * maxJumpHeight
+            console.log(jumpVelocity);
+            isJumping = true;
+        }
+    }
+
+    function updateCamera() {
+        const vector = new THREE.Vector3()
+        targetPosition.addScaledVector(vector, 0.25);
+        const {x,y,z} = targetPosition
+
+        camera.position.x += (targetPosition.x - camera.position.x) * dampingFactor;
+        camera.position.y += (targetPosition.y - camera.position.y) * dampingFactor;
+        camera.position.z += (targetPosition.z - camera.position.z) * dampingFactor;
+        const cameraX = camera.position.x.toFixed(1);
+        const cameraY = camera.position.y.toFixed(1);
+        const cameraZ = camera.position.z.toFixed(1);
+        if (Number(cameraX) <= x && Number(cameraY) <= y && Number(cameraZ) <= z){
+            isLoading = false
+            title.classList.remove("display-none");
+            dock_con.classList.remove("display-none");
+        }
+
+    }
+
+    function mouseCamera() {
+        const vector = new THREE.Vector3();
+        endPosition.addScaledVector(vector, 0.25);
+        const {x,y,z} = endPosition
+
+        camera.position.x += (endPosition.x - camera.position.x) * dampingFactor;
+        camera.position.y += (endPosition.y - camera.position.y) * dampingFactor;
+        camera.position.z += (endPosition.z - camera.position.z) * dampingFactor;
+        const cameraX = camera.position.x.toFixed(1);
+        const cameraY = camera.position.y.toFixed(1);
+        const cameraZ = camera.position.z.toFixed(1);
+        if (Number(cameraX) > x && Number(cameraY) > y && Number(cameraZ) > z){
+            clearMouse()
+        }
+
+    }
+
+    function clearMouse(){
+        isDown = false
+        clearInterval(timer);
+    }
+
+    function hoverPoint(){
+        if (mouse.x === 0 && mouse.y ===0) return;
+        raycaster.setFromCamera(mouse, camera);
+        let intersects = raycaster.intersectObjects(scene.children);
+        if(INTERSECTED) INTERSECTED.material.emissive.setHex( INTERSECTED.currentHex );
+        if (intersects.length && intersects[0].object.name){
+            INTERSECTED = intersects[0].object;
+            INTERSECTED.currentHex = INTERSECTED.material.emissive.getHex();
+            INTERSECTED.material.emissive.setHex( 0x8F8BFF );
+            showTip(INTERSECTED?.material.name)
+        }else {
+            if (INTERSECTED) INTERSECTED.material.emissive.setHex( INTERSECTED.currentHex );
+            INTERSECTED = null;
+            tip.style.display = 'none';
+        }
+    }
+    function showTip(title){
+        tip.classList.add('tip');
+        tip.textContent = title;
+        tip.style.left = (client.x + 15) + 'px';
+        tip.style.top = (client.y + 15) + 'px';
+        tip.style.display = 'block';
+    }
+
+</script>
+</html>
