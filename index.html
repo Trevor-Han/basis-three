@@ -126,10 +126,10 @@
     function setRotateAnimation(gltf){
         gltf.scene.traverse((e)=>{
             const polySurface_number = e.name.replace(/polySurface/g,'')
-            const rotatePoly = ['58','81','90','102']
+            const rotatePoly = ['60','81','90','94']
             if (rotatePoly.includes(polySurface_number)){
                 const rotation = e.rotation
-                const tween  = new TWEEN.Tween( e.rotation)
+                const tween  = new TWEEN.Tween( e.rotation )
                     .to({x:rotation.x,y:Math.PI * 2,z:rotation.z}, 50)
                     .easing(TWEEN.Easing.Linear.None)
                     .repeat(Infinity)
