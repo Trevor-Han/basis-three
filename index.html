@@ -7,6 +7,7 @@
     <link type="text/css" rel="stylesheet" href="./css/main.css">
     <link type="text/css" rel="stylesheet" href="./css/dock.css">
     <link type="text/css" rel="stylesheet" href="./css/text-up.css">
+    <link type="text/css" rel="stylesheet" href="./css/mask.css">
 </head>
 <body>
 <section>
@@ -25,11 +26,11 @@
                 加载完成
                 <svg t="1677233206130" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2675" width="24" height="24"><path d="M537.6 102.4c73.5744 0 142.336 20.6848 200.704 56.576 15.872 9.6256 16.7936 23.1424 2.9696 40.5504-14.08 16.2816-43.008 13.2608-86.8352-9.216l-0.0512 0.0512a318.1568 318.1568 0 1 0 104.8064 524.3904h0.3584c19.456-26.7776 40.5504-40.192 63.1296-40.2432l6.8096 0.4096c24.064 4.4032 30.4128 16.6912 19.0464 36.864l0.2048-0.3584-0.1536 0.1536-0.0512 0.2048h-0.1024l-7.936 10.5984A384 384 0 1 1 537.6 102.4z m332.288 201.0112a33.28 33.28 0 0 1 0 47.104l-276.48 276.48a31.2832 31.2832 0 0 1-0.512 0.4608l-3.584 3.584a30.72 30.72 0 0 1-43.4176 0l-1.8432-1.792-0.4096-0.512-135.3216-135.2704a30.72 30.72 0 0 1 0-43.4176l3.584-3.584a30.72 30.72 0 0 1 43.4688 0l112.2304 112.128 255.232-255.1808a33.28 33.28 0 0 1 47.104 0z" fill="#ffffff" p-id="2676"></path></svg>
             </p>
-            <!--        <div class="start">进入场景</div>-->
         </div>
     </div>
     <canvas id="canvas"></canvas>
 
+    <!-- mac-dock-->
     <div class="dock_con display-none">
         <div class="dock">
             <div class="dock-item">
@@ -42,15 +43,34 @@
                 <i class="icon icon_check" data-name="模型切换"></i>
             </div>
             <div class="dock-item">
+                <i class="icon icon_photo" data-name="照相"></i>
+            </div>
+            <div class="dock-item">
                 <i class="icon icon_setup" data-name="设置"></i>
             </div>
         </div>
     </div>
 
-<!-- 颜色贴图-->
+   <!-- 颜色贴图-->
     <div class="color-map"></div>
 
+    <!-- 跳动文字-->
     <div class="text-up"></div>
+
+    <!-- 截图-->
+    <div class="photo-mask display-none">
+        <div class="mask-con">
+            <div class="mask-image">
+                <img src="" alt="photo-mask" class="img"/>
+            </div>
+            <div class="mask-text">长按保存</div>
+
+        </div>
+
+        <div class="close-mask">
+            <i class="icon icon-close"></i>
+        </div>
+    </div>
 
 </section>
 
@@ -87,6 +107,7 @@
 
     let INTERSECTED;
     let timer;
+    let longPressTimer;
 
     let isLoading = true;
     let isJumping = false;
@@ -106,6 +127,9 @@
     const loading_con = document.querySelector('.loading-con');
     const title = document.querySelector(".header-title");
     const color_map = document.querySelector(".color-map");
+    const closeMask = document.querySelector('.close-mask');
+    const photoMask = document.querySelector('.photo-mask');
+    const imageMask = document.querySelector('.mask-image img');
 
     const dampingFactor = 0.05;
     const maxJumpHeight = 2;
@@ -371,6 +395,11 @@
         //
         // canvas.addEventListener('mouseup', onMouseup);
 
+        closeMask.addEventListener('click', handleCloseMask)
+
+        imageMask.addEventListener("mousedown", handleImageMaskMouseDown);
+        imageMask.addEventListener("mouseup", handleImageMaskMouseUp);
+
 
     }
     function onWindowResize() {
@@ -387,6 +416,29 @@
 
     function onMouseup() {
         clearMouse();
+    }
+
+    function handleCloseMask(){
+        photoMask.classList.add('display-none');
+        imageMask.src = ''
+    }
+
+    function handleImageMaskMouseDown(event) {
+        if (event.button === 0) {
+            longPressTimer = setTimeout(handleLongPress, 1000);
+        }
+    }
+
+    function handleImageMaskMouseUp() {
+        clearTimeout(longPressTimer);
+    }
+
+   async function handleLongPress() {
+       const dataURL = await getGltfUrl();
+        const link = document.createElement("a");
+        link.href = dataURL.toString();
+        link.download = "canvas_image.png";
+        link.click();
     }
 
     function animate(){
@@ -448,6 +500,13 @@
             })
         }
 
+        const handleTakePicture = async ()=> {
+            console.log(111);
+            imageMask.src = await getGltfUrl();
+            photoMask.classList.remove('display-none');
+            showWhiteScreen()
+        }
+
         delegate(dock, 'click', 'i', function(e){
             const DOCK_MAP = [
                 {
@@ -461,6 +520,10 @@
                 {
                     target: ()=> e.target.classList.contains('icon_fly'),
                     handler: handleFly
+                },
+                {
+                    target: ()=> e.target.classList.contains('icon_photo'),
+                    handler: handleTakePicture
                 }
             ]
             const event = DOCK_MAP.find(item => item.target());
@@ -469,6 +532,31 @@
             }
         })
 
+    }
+
+    function getGltfUrl(){
+        return new Promise((resolve)=>{
+            renderer.render( scene, camera );
+            resolve(canvas.toDataURL('image/png'))
+        })
+    }
+
+    function showWhiteScreen(){
+        const screen = document.createElement('div');
+        screen.style.cssText = `
+            background: rgba(255,255,255,1);
+            position: fixed;
+            z-index: 9999;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            animation: fade 0.5s cubic-bezier(0.075,0.82,0.165,1) forwards;
+            `
+        document.body.appendChild(screen);
+        setTimeout(function() {
+            document.body.removeChild(screen);
+        }, 100);
     }
 
     function updateJump(){
@@ -481,6 +569,7 @@
             }
         }
     }
+
 
     function jump() {
         if (!isJumping) {
