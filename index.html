@@ -111,13 +111,15 @@
 
     let isLoading = true;
     let isJumping = false;
-    let isDown = false; // 是否点击
+    let isDown = false;
     let isAppendColor = false; // 是否添加了颜色贴图
-    let isCheck = false;
-    let isFly = false;
+    let isCheck = false; // 是否切换到飞行模式
+    let isFly = false; // 是否准备就绪
+    let beginFly = false; // 是否开始飞行
+
     let jumpVelocity = 0;
+    let flySeep = 0; // 飞行速度
     let keyCode = ''; // 获取按键
-    let flyPoly = [];
 
     const canvas = document.querySelector('#canvas');
     const dock = document.querySelector('.dock');
@@ -142,25 +144,10 @@
     async function loadScenes(){
         gltf = await loadStaticScene();
         gltf_v11 = await loadStaticScene_v11();
-        setRotateAnimation(gltf)
         showLoading();
         handleIntoScene();
     }
 
-    function setRotateAnimation(gltf){
-        gltf.scene.traverse((e)=>{
-            const polySurface_number = e.name.replace(/polySurface/g,'')
-            const rotatePoly = ['60','81','90','94']
-            if (rotatePoly.includes(polySurface_number)){
-                const rotation = e.rotation
-                const tween  = new TWEEN.Tween( e.rotation )
-                    .to({x:rotation.x,y:Math.PI * 2,z:rotation.z}, 50)
-                    .easing(TWEEN.Easing.Linear.None)
-                    .repeat(Infinity)
-                flyPoly.push(tween)
-            }
-        })
-    }
     function loadStaticScene(){
         return new Promise(resolve => {
             let loader = new GLTFLoader();
@@ -446,14 +433,46 @@
         updateJump();
         controls.update();
         TWEEN.update();
+        beginFly && flyGltf();
         isLoading && updateCamera();
         !isLoading && hoverPoint();
         renderer.render( scene, camera );
     }
 
+    function flyGltf(){
+        gltf.scene.traverse((e)=>{
+            const polySurface_number = e.name.replace(/polySurface/g,'')
+            const rotatePoly = ['60','81','90','94']
+            if (rotatePoly.includes(polySurface_number)){
+                e.rotation.y += flySeep
+            }
+        })
+        if (flySeep <= 1 && isFly){
+            flySeep += 0.002
+        }else {
+            flySeep -= 0.002
+        }
+        if (flySeep <= 0){
+            flySeep = 0
+        }
+    }
+
+    function cleanFly(){
+        if (!isCheck){
+            beginFly = false;
+            isFly = false;
+            flySeep = 0
+        }
+    }
+
     function handleDockClick() {
         const handleCheck = () =>{
             isCheck = !isCheck;
+            cleanFly();
+            checkGltf();
+        }
+
+        const checkGltf = () =>{
             const gltf_vector = isCheck ? new THREE.Vector3(0,0,0): new THREE.Vector3(0,27,0)
             const gltf_v11_vector = isCheck ? new THREE.Vector3(0,0,0): new THREE.Vector3(0,-27,0)
             new TWEEN.Tween( gltf.scene.position)
@@ -482,7 +501,9 @@
                     const polySurface_number = e.name.replace(/polySurface/g,'')
                     const windBlade = ['21','101','201']
                     if (windBlade.includes(polySurface_number)){
-                        e.material.color.set(color)
+                        e.material.color.set(color);
+                        isCheck = true;
+                        checkGltf();
                     }
                 })
             }
@@ -490,18 +511,13 @@
         }
 
         const handleFly = () =>{
+            beginFly = true
+            isCheck = true
             isFly =  !isFly
-            flyPoly.forEach(item=>{
-                if (isFly){
-                    item && item.start()
-                }else {
-                    item && item.stop()
-                }
-            })
+            checkGltf();
         }
 
         const handleTakePicture = async ()=> {
-            console.log(111);
             imageMask.src = await getGltfUrl();
             photoMask.classList.remove('display-none');
             showWhiteScreen()
@@ -574,7 +590,6 @@
     function jump() {
         if (!isJumping) {
             jumpVelocity = 0.3 * maxJumpHeight
-            console.log(jumpVelocity);
             isJumping = true;
         }
     }
