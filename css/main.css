@@ -82,7 +82,7 @@ a, button, input, select {
 	text-align: center;
 	width: 100%;
 	padding: 10px;
-	top: -20px;
+	top: 0;
 	font-size: 18px;
 	animation: showTop 0.5s cubic-bezier(0.075,0.82,0.165,1) forwards;
 }
@@ -247,5 +247,5 @@ a, button, input, select {
 }
 
 @keyframes showTop {
-	to { top: 0;}
+	to { top: 20px;}
 }

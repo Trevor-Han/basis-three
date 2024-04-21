@@ -92,7 +92,7 @@
     import { GLTFLoader } from './js/loaders/GLTFLoader.js';
     import TWEEN from './js/tween.module.js';
 
-    let scene, camera, renderer, mesh,controls,dLight,raycaster,mixer,tween;
+    let scene, camera, renderer, mesh, controls, dLight, raycaster, mixer, tween,grid, grid_1, sprite;
     let gltf,gltf_v11;
     let client = {x:0, y:0}
     let tip = document.createElement('div')
@@ -155,6 +155,9 @@
             loader.load(url, (gltf) => {
                 gltf.scene.position.set(0,27,0)
                 gltf.scene.scale.set(15, 15, 15);
+                gltf.scene.traverse(function (object){
+                    object.castShadow = true
+                })
                 resolve(gltf);
             },(event) =>{
                 const {loaded,total} = event
@@ -170,6 +173,9 @@
             loader.load(url, (gltf) => {
                 gltf.scene.position.set(0,-27,0)
                 gltf.scene.scale.set(15, 15, 15);
+                gltf.scene.traverse(function (object){
+                    object.castShadow = true
+                })
                 resolve(gltf);
             },(event) =>{
                 const {loaded,total} = event
@@ -216,8 +222,13 @@
         }
         const initScene = () =>{
             scene = new THREE.Scene();
-            scene.background = new THREE.Color( 0xa0a0a0 );
-            scene.fog = new THREE.Fog( 0xa0a0a0, 4, 20 );
+            scene.background = new THREE.Color( 0x333333 );
+            scene.fog = new THREE.Fog( 0x333333, 4, 20 );
+            // const map = new THREE.TextureLoader().load( '../image/sprite0.png' );
+            // const material = new THREE.SpriteMaterial( { map: map, color: 0xffffff } );
+            // sprite = new THREE.Sprite(material);
+            // sprite.name = 'sprite'
+            // scene.add(sprite)
         }
 
         const initCamera = () =>{
@@ -274,16 +285,28 @@
         }
 
         const initGround = () =>{
-            const ground = new THREE.Mesh( new THREE.PlaneGeometry( 40, 40 ), new THREE.MeshPhongMaterial( { color: 0xbbbbbb, depthWrite: false } ) );
+            const planeGeometry = new THREE.PlaneGeometry( 40, 40 )
+            const meshPhongMaterial = new THREE.MeshPhongMaterial( { color: 0x333333, depthWrite: false } )
+            const ground = new THREE.Mesh( planeGeometry, meshPhongMaterial);
             ground.rotation.x = - Math.PI / 2;
             ground.receiveShadow = true;
             scene.add( ground );
         }
         const initGrid = () =>{
-            const grid = new THREE.GridHelper( 40, 20, 0x000000, 0x000000 );
+            grid = customGrid()
+            scene.add( grid );
+        }
+        const initGrid_1 = () =>{
+            grid_1 = customGrid();
+            grid_1.position.z = 20;
+            scene.add( grid_1 );
+
+        }
+        const customGrid = () =>{
+            const grid = new THREE.GridHelper( 40, 20, 0xdddddd, 0xdddddd );
             grid.material.opacity = 0.2;
             grid.material.transparent = true;
-            scene.add( grid );
+            return grid
         }
 
         const initAxesHelper = () =>{
@@ -308,10 +331,10 @@
         hemiLight();
         initGltfGroup();
         // initMash();
-        // initLoadGltf();
         initLight();
         initGround();
         initGrid();
+        initGrid_1();
 
         initRender();
         initControls();
@@ -455,6 +478,15 @@
         if (flySeep <= 0){
             flySeep = 0
         }
+        grid.position.z -= flySeep
+        grid_1.position.z -= flySeep
+        if (grid.position.z <= -20){
+            grid.position.z = 0
+        }
+        if (grid_1.position.z <= 0){
+            grid_1.position.z = 20
+        }
+        // gltf.scene.rotation.x = 0.1
     }
 
     function cleanFly(){
@@ -651,6 +683,16 @@
             tip.style.display = 'none';
         }
     }
+
+  /*  function spriteClick(){
+        raycaster.setFromCamera(mouse, camera);
+        let intersects = raycaster.intersectObject(sprite);
+        if (intersects.length && intersects[0].object.name){
+
+        }
+    }
+    canvas.addEventListener('click',spriteClick)*/
+
     function showTip(title){
         tip.classList.add('tip');
         tip.textContent = title;
