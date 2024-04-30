@@ -91,6 +91,13 @@
     import { GUI } from './js/lil-gui.module.min.js'
     import { GLTFLoader } from './js/loaders/GLTFLoader.js';
     import TWEEN from './js/tween.module.js';
+    import { EffectComposer } from './js/postprocessing/EffectComposer.js'
+    import { RenderPass } from './js/postprocessing/RenderPass.js'
+    import { OutlinePass } from './js/postprocessing/OutlinePass.js'
+    import {OutputPass} from './js/postprocessing/OutputPass.js'
+    import { ShaderPass } from './js/postprocessing/ShaderPass.js'
+    import {GammaCorrectionShader} from './js/shaders/GammaCorrectionShader.js'
+    import {FXAAShader} from './js/shaders/FXAAShader.js'
 
     let scene, camera, renderer, mesh, controls, dLight, raycaster, mixer, tween,grid, grid_1, sprite;
     let gltf,gltf_v11;
@@ -106,6 +113,7 @@
     let axesHelper = new THREE.AxesHelper( 3 );
 
     let INTERSECTED;
+    let selectedObjects = [];
     let timer;
     let longPressTimer;
 
@@ -120,6 +128,9 @@
     let jumpVelocity = 0;
     let flySeep = 0; // 飞行速度
     let keyCode = ''; // 获取按键
+    let shaders = []; // 添加着色
+
+    let composer, outlinePass, effectFXAA; // 后期处理相关
 
     const canvas = document.querySelector('#canvas');
     const dock = document.querySelector('.dock');
@@ -157,6 +168,20 @@
                 gltf.scene.scale.set(15, 15, 15);
                 gltf.scene.traverse(function (object){
                     object.castShadow = true
+                    // if (object.isMesh){
+                    // 设置成线性几何图，会卡顿
+                    //     const edges = new THREE.EdgesGeometry(object.geometry);
+                    //     const edgesMaterial = new THREE.LineBasicMaterial({
+                    //         color: '#00ffff'
+                    //     })
+                    //     const line = new THREE.LineSegments(edges,edgesMaterial);
+                    //     object.add(line);
+                    //     object.material = new THREE.MeshLambertMaterial({
+                    //         color: '#004444',
+                    //         transparent: true,
+                    //         opacity: 0.4
+                    //     })
+                    // }
                 })
                 resolve(gltf);
             },(event) =>{
@@ -224,11 +249,14 @@
             scene = new THREE.Scene();
             scene.background = new THREE.Color( 0x333333 );
             scene.fog = new THREE.Fog( 0x333333, 4, 20 );
-            // const map = new THREE.TextureLoader().load( '../image/sprite0.png' );
-            // const material = new THREE.SpriteMaterial( { map: map, color: 0xffffff } );
-            // sprite = new THREE.Sprite(material);
-            // sprite.name = 'sprite'
-            // scene.add(sprite)
+            // 添加雪碧模型
+            const map = new THREE.TextureLoader().load( '../image/check.png' );
+            const material = new THREE.SpriteMaterial( { map: map, color: 0xffffff } );
+            sprite = new THREE.Sprite(material);
+            sprite.name = 'sprite'
+            sprite.scale.set(0.2,0.2,0.2)
+            sprite.position.set(0,10,1)
+            scene.add(sprite)
         }
 
         const initCamera = () =>{
@@ -290,6 +318,7 @@
             const ground = new THREE.Mesh( planeGeometry, meshPhongMaterial);
             ground.rotation.x = - Math.PI / 2;
             ground.receiveShadow = true;
+            addShader( meshPhongMaterial );
             scene.add( ground );
         }
         const initGrid = () =>{
@@ -324,6 +353,41 @@
             renderer.setPixelRatio( window.devicePixelRatio );
             renderer.setSize( window.innerWidth, window.innerHeight );
             renderer.shadowMap.enabled = true;
+
+            // 后期处理
+            composer = new EffectComposer( renderer );
+            const renderPass = new RenderPass( scene, camera );
+            composer.addPass( renderPass );
+            outlinePass = new OutlinePass( new THREE.Vector2( window.innerWidth, window.innerHeight ), scene, camera );
+            composer.addPass( outlinePass );
+
+            // const textureLoader = new THREE.TextureLoader();
+            // textureLoader.load( '../image/tri_pattern.jpg', function ( texture ) {
+            //    用贴图方式设置高亮边
+            //     outlinePass.patternTexture = texture;
+            //     texture.wrapS = THREE.RepeatWrapping;
+            //     texture.wrapT = THREE.RepeatWrapping;
+            //
+            // } );
+
+            outlinePass.edgeStrength = 10.0 // 边框的亮度
+            outlinePass.edgeGlow = 1 // 光晕[0,1]
+            outlinePass.usePatternTexture = false // 是否使用父级的材质
+            outlinePass.edgeThickness = 1.0 // 边框宽度
+            outlinePass.downSampleRatio = 1 // 边框弯曲度
+            outlinePass.pulsePeriod = 5 // 呼吸闪烁的速度
+            outlinePass.visibleEdgeColor.set(parseInt(0x00ff00)) // 呼吸显示的颜色
+            outlinePass.hiddenEdgeColor = new THREE.Color(0, 0, 0) // 呼吸消失的颜色
+            outlinePass.clear = true
+
+            const outputPass = new OutputPass();
+            composer.addPass( outputPass );
+
+            effectFXAA = new ShaderPass( FXAAShader );
+            effectFXAA.uniforms[ 'resolution' ].value.set( 1 / window.innerWidth, 1 / window.innerHeight );
+            effectFXAA.renderToScreen = true
+            composer.addPass( effectFXAA );
+
         }
         initColorMap();
         initCamera();
@@ -399,17 +463,13 @@
                     break;
             }
         });
-
         // 点击的时候实现一个切换相机效果
         // canvas.addEventListener('mousedown', onMousedown);
         //
         // canvas.addEventListener('mouseup', onMouseup);
-
         closeMask.addEventListener('click', handleCloseMask)
-
         imageMask.addEventListener("mousedown", handleImageMaskMouseDown);
         imageMask.addEventListener("mouseup", handleImageMaskMouseUp);
-
 
     }
     function onWindowResize() {
@@ -417,6 +477,9 @@
         camera.updateProjectionMatrix();
 
         renderer.setSize( window.innerWidth, window.innerHeight );
+        composer.setSize( window.innerWidth, window.innerHeight );
+
+        effectFXAA.uniforms[ 'resolution' ].value.set( 1 / window.innerWidth, 1 / window.innerHeight );
     }
 
     function onMousedown() {
@@ -459,7 +522,18 @@
         beginFly && flyGltf();
         isLoading && updateCamera();
         !isLoading && hoverPoint();
-        renderer.render( scene, camera );
+        // renderer.render( scene, camera );
+        composer.render();
+
+        if (shaders?.length) {
+            // 着色器动画
+            shaders.forEach((shader) => {
+                shader.uniforms.uTime.value += 0.008;
+                if (shader.uniforms.uTime.value >= 1) {
+                    shader.uniforms.uTime.value = 0;
+                }
+            });
+        }
     }
 
     function flyGltf(){
@@ -506,6 +580,7 @@
 
         const checkGltf = () =>{
             const gltf_vector = isCheck ? new THREE.Vector3(0,0,0): new THREE.Vector3(0,27,0)
+            const sprite_vector = isCheck ? new THREE.Vector3(0,1.5,1): new THREE.Vector3(0,10,1)
             const gltf_v11_vector = isCheck ? new THREE.Vector3(0,0,0): new THREE.Vector3(0,-27,0)
             new TWEEN.Tween( gltf.scene.position)
                 .to({ x: gltf_vector.x, y: gltf_vector.y, z: gltf_vector.z }, 500)
@@ -513,6 +588,10 @@
                 .start();
             new TWEEN.Tween( gltf_v11.scene.position)
                 .to({ x: gltf_v11_vector.x, y: gltf_v11_vector.y, z: gltf_v11_vector.z }, 500)
+                .easing(TWEEN.Easing.Quadratic.Out)
+                .start();
+            new TWEEN.Tween( sprite.position)
+                .to({ x: sprite_vector.x, y: sprite_vector.y, z: sprite_vector.z }, 500)
                 .easing(TWEEN.Easing.Quadratic.Out)
                 .start();
         }
@@ -667,31 +746,42 @@
         clearInterval(timer);
     }
 
+    function spriteClick(){
+        raycaster.setFromCamera(mouse, camera);
+        let intersects = raycaster.intersectObject(sprite);
+        if (intersects.length && intersects[0].object.name){
+            shaders.forEach((shader) => {
+                shader.uniforms.uColor = { value: new THREE.Color('#8F8BFF') };
+            });
+        }
+    }
+
+    canvas.addEventListener('click',spriteClick)
+
     function hoverPoint(){
         if (mouse.x === 0 && mouse.y ===0) return;
         raycaster.setFromCamera(mouse, camera);
         let intersects = raycaster.intersectObjects(scene.children);
         if(INTERSECTED) INTERSECTED.material.emissive.setHex( INTERSECTED.currentHex );
-        if (intersects.length && intersects[0].object.name){
+        if (intersects.length && intersects[0].object.name && intersects[0].object.name !== 'sprite'){
             INTERSECTED = intersects[0].object;
-            INTERSECTED.currentHex = INTERSECTED.material.emissive.getHex();
-            INTERSECTED.material.emissive.setHex( 0x8F8BFF );
+            addSelectedObject( INTERSECTED );
+            outlinePass.selectedObjects = selectedObjects;
+            // INTERSECTED.currentHex = INTERSECTED.material.emissive.getHex();
+            // INTERSECTED.material.emissive.setHex( 0x8F8BFF );
             showTip(INTERSECTED?.material.name)
         }else {
-            if (INTERSECTED) INTERSECTED.material.emissive.setHex( INTERSECTED.currentHex );
+            // if (INTERSECTED) INTERSECTED.material.emissive.setHex( INTERSECTED.currentHex );
             INTERSECTED = null;
+            outlinePass.selectedObjects = []
             tip.style.display = 'none';
         }
     }
 
-  /*  function spriteClick(){
-        raycaster.setFromCamera(mouse, camera);
-        let intersects = raycaster.intersectObject(sprite);
-        if (intersects.length && intersects[0].object.name){
-
-        }
+    function addSelectedObject( object ) {
+        selectedObjects = [];
+        selectedObjects.push( object );
     }
-    canvas.addEventListener('click',spriteClick)*/
 
     function showTip(title){
         tip.classList.add('tip');
@@ -699,6 +789,40 @@
         tip.style.left = (client.x + 15) + 'px';
         tip.style.top = (client.y + 15) + 'px';
         tip.style.display = 'block';
+    }
+
+    function addShader(material){
+        const vertexShader1 = `uniform float uSize;
+              varying vec2 vUv;
+              void main() {`;
+        const vertexShader3 = `#include <fog_vertex>
+                        vUv=vec2(-position.x,-position.y)/uSize;`;
+        const fragmentShader1 = `varying vec2 vUv;
+                uniform float uTime;
+                uniform vec3 uColor;
+                uniform float uSize;
+                void main() {`;
+        const fragmentShader2 = `#include <dithering_fragment>
+            float d=length(vUv);
+                  if(d >= uTime&&d<=uTime+ 0.1) {
+                    gl_FragColor.rgb = gl_FragColor.rgb+mix(uColor,gl_FragColor.rgb,1.0-(d-uTime)*10.0 )*0.5  ;
+                  }`;
+        material.onBeforeCompile = (shader) => {
+            shaders.push(shader);
+            shader.uniforms.uSize = { value: 50 };
+            shader.uniforms.uTime = { value: 0.1 };
+            shader.uniforms.uColor = { value: new THREE.Color('#4ff9ff') };
+            shader.vertexShader = shader.vertexShader.replace('void main() {', vertexShader1);
+            shader.vertexShader = shader.vertexShader.replace(
+                '#include <fog_vertex>',
+                vertexShader3
+            );
+            shader.fragmentShader = shader.fragmentShader.replace('void main() {', fragmentShader1);
+            shader.fragmentShader = shader.fragmentShader.replace(
+                '#include <dithering_fragment>',
+                fragmentShader2
+            );
+        };
     }
 
 </script>
