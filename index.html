@@ -99,7 +99,8 @@
     import {GammaCorrectionShader} from './js/shaders/GammaCorrectionShader.js'
     import {FXAAShader} from './js/shaders/FXAAShader.js'
 
-    let scene, camera, renderer, mesh, controls, dLight, raycaster, mixer, tween,grid, grid_1, sprite;
+    let scene, camera, cubeCamera,cubeRenderTarget,renderer, mesh, controls,
+        dLight, raycaster, mixer, tween,grid, grid_1, sprite;
     let gltf,gltf_v11;
     let client = {x:0, y:0}
     let tip = document.createElement('div')
@@ -263,6 +264,10 @@
             camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.1, 100 );
             camera.position.set( 10, 20, 10 );
 
+            cubeRenderTarget = new THREE.WebGLCubeRenderTarget(1024);
+            cubeRenderTarget.texture.type = THREE.HalfFloatType;
+            cubeCamera = new THREE.CubeCamera(0.1,200,cubeRenderTarget);
+
             // const gui = new GUI()
             // gui.add(camera.position, 'x', 0, 100)
             // gui.add(camera.position, 'y', 0, 100)
@@ -314,7 +319,13 @@
 
         const initGround = () =>{
             const planeGeometry = new THREE.PlaneGeometry( 40, 40 )
-            const meshPhongMaterial = new THREE.MeshPhongMaterial( { color: 0x333333, depthWrite: false } )
+            const meshPhongMaterial = new THREE.MeshStandardMaterial( {
+                color: 0x333333,
+                depthWrite: false,
+                roughness: 0.05,
+                metalness: 0.5,
+                envMap: cubeRenderTarget.texture,
+            } )
             const ground = new THREE.Mesh( planeGeometry, meshPhongMaterial);
             ground.rotation.x = - Math.PI / 2;
             ground.receiveShadow = true;
@@ -516,6 +527,10 @@
 
     function animate(){
         requestAnimationFrame( animate );
+        cubeCamera.position.copy(camera.position);
+        cubeCamera.position.y *= -1;
+        cubeCamera.update(renderer,scene);
+
         updateJump();
         controls.update();
         TWEEN.update();
