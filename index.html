@@ -98,6 +98,7 @@
     import { ShaderPass } from './js/postprocessing/ShaderPass.js'
     import {GammaCorrectionShader} from './js/shaders/GammaCorrectionShader.js'
     import {FXAAShader} from './js/shaders/FXAAShader.js'
+    import JoyStick, { StickStatus } from './libs/JoyStick.js'
 
     let scene, camera, cubeCamera,cubeRenderTarget,renderer, mesh, controls,
         dLight, raycaster, mixer, tween,grid, grid_1, sprite;
@@ -147,10 +148,15 @@
 
     const dampingFactor = 0.05;
     const maxJumpHeight = 2;
-    const colorMap = ["#ffffff","#9287E7", "#FF7B7B", "#FEB64D", "#49D6A5", "#32D3EB"]
+    const colorMap = ["#ffffff","#9287E7", "#FF7B7B", "#FEB64D", "#49D6A5", "#32D3EB"];
 
-    canvas.height = window.innerHeight
-    canvas.width = window.innerWidth
+    canvas.height = window.innerHeight;
+    canvas.width = window.innerWidth;
+
+    const throttledScrollHandler = throttle(function() {
+        const id = document.querySelector('.text-up')
+        new TextUp( {id:id,text: keyCode.toUpperCase()} )
+    }, 500);
 
     loadScenes();
     async function loadScenes(){
@@ -416,6 +422,7 @@
         // initAxesHelper();
         initRaycaster();
         initAddEventListener();
+        initMobileControls();
 
         handleDockClick();
 
@@ -434,43 +441,26 @@
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
         });
 
-        const throttledScrollHandler = throttle(function() {
-            const id = document.querySelector('.text-up')
-            new TextUp( {id:id,text: keyCode.toUpperCase()} )
-        }, 500);
-
         document.addEventListener('keydown', function(event) {
             keyCode = event.key === ' '? 'space' : event.key
             camera.position.addScaledVector(velocity, 0.5);
-            const angle = controls.getAzimuthalAngle();
-            const speed = 0.25
             mouse = new THREE.Vector2(0,0)
-
 
             switch (event.key) {
                 case 'w':
-                    temp_vector.set(0, 0, -1).applyAxisAngle(up_vector, angle);
-                    camera.position.addScaledVector(temp_vector, speed);
-                    throttledScrollHandler()
+                    handleMobileCamera(new THREE.Vector3(0,0,-1));
                     break;
                 case 's':
-                    temp_vector.set(0, 0, 1).applyAxisAngle(up_vector, angle);
-                    camera.position.addScaledVector(temp_vector, speed);
-                    throttledScrollHandler()
+                    handleMobileCamera(new THREE.Vector3(0,0,1));
                     break;
                 case 'a':
-                    temp_vector.set(-1, 0, 0).applyAxisAngle(up_vector, angle);
-                    camera.position.addScaledVector(temp_vector, speed);
-                    throttledScrollHandler()
+                    handleMobileCamera(new THREE.Vector3(-1,0,0));
                     break;
                 case 'd':
-                    temp_vector.set(1, 0, 0).applyAxisAngle(up_vector, angle);
-                    camera.position.addScaledVector(temp_vector, speed);
-                    throttledScrollHandler()
+                    handleMobileCamera(new THREE.Vector3(1,0,0));
                     break;
                 case ' ':
                     jump();
-                    throttledScrollHandler()
                     break;
             }
         });
@@ -483,6 +473,51 @@
         imageMask.addEventListener("mouseup", handleImageMaskMouseUp);
 
     }
+    function initMobileControls(){
+        if ('ontouchstart' in document.documentElement) {
+            const stickContainer = document.createElement('div')
+            stickContainer.style.cssText = `
+                position: fixed;
+                width: 80px;
+                height: 80px;
+                z-index: 99999999;
+                border-radius: 50%;
+                bottom: 110px;
+                left: 50%;
+                margin-left: -40px;
+            `
+            document.body.appendChild(stickContainer);
+            new JoyStick(stickContainer, {}, (status) => {
+                const position = new THREE.Vector2(status.x, status.y);
+                const angle = position.angle();
+                let radio = angle * (180 / Math.PI)
+
+               const keyCodeMap = [
+                   ['w',radio > 45 && radio <= 135,new THREE.Vector3(0,0,-1)],
+                   ['a',radio> 135 && radio <= 225,new THREE.Vector3(-1,0,0)],
+                   ['s',radio > 225 && radio <= 315,new THREE.Vector3(0,0,1)],
+                   ['d',radio > 315 || radio <= 45,new THREE.Vector3(1,0,0)],
+               ]
+                for (let [_key,_value,_Vector] of keyCodeMap){
+                    if(_value){
+                        keyCode = _key
+                        handleMobileCamera(_Vector);
+                    }
+                }
+            })
+        }
+    }
+
+    function handleMobileCamera(vector){
+
+        const angle = controls.getAzimuthalAngle();
+        const speed = 0.25
+        temp_vector.set(vector.x,vector.y,vector.z).applyAxisAngle(up_vector, angle);
+        camera.position.addScaledVector(temp_vector, speed);
+
+        throttledScrollHandler();
+    }
+
     function onWindowResize() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
